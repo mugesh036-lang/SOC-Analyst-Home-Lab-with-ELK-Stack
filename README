@@ -1,0 +1,251 @@
+# 🔐 SOC Analyst Home Lab: ELK Stack Security Monitoring
+
+![ELK Version](https://img.shields.io/badge/ELK-8.13.0-blue)
+
+> **A complete Security Operations Center (SOC) lab environment built from scratch to simulate real-world cyber attacks, collect Windows security telemetry, and visualize threats using the ELK Stack.**
+
+---
+
+## 📋 Table of Contents
+- [Project Overview](#-project-overview)
+- [Lab Architecture](#-lab-architecture)
+- [Tools & Technologies](#-tools--technologies)
+- [Installation Guide](#-installation-guide)
+- [Detection Capabilities](#-detection-capabilities)
+- [Attack Simulation & Results](#-attack-simulation--results)
+- [Kibana Dashboard](#-kibana-dashboard)
+- [MITRE ATT&CK Mapping](#-mitre-attck-mapping)
+- [Incident Response Report](#-incident-response-report)
+- [Lessons Learned](#-lessons-learned)
+- [Skills Demonstrated](#-skills-demonstrated)
+- [Future Improvements](#-future-improvements)
+- [How to Replicate](#-how-to-replicate)
+
+---
+
+## 🎯 Project Overview
+
+This project demonstrates my ability to build and operate a Security Operations Center (SOC) monitoring environment using the **ELK Stack** (Elasticsearch, Logstash, Kibana). I designed a complete threat detection pipeline that:
+
+- **Collects** Windows Security logs and Sysmon telemetry
+- **Transports** logs securely to a centralized SIEM
+- **Visualizes** security events in real-time dashboards
+- **Detects** brute force attacks and suspicious activity
+- **Maps** detections to the MITRE ATT&CK framework
+
+This lab simulates a real-world SOC environment where analysts monitor endpoints for malicious activity.
+
+---
+
+## 🏗️ Lab Architecture
+
+### Network Design
+─────────────────────────────────┐
+│ VirtualBox Host-Only Net │
+│ 192.168.56.0/24 │
+└─────────────────────────────────┘
+│
+┌────────────────────────────┼────────────────────────────┐
+│ │ │
+▼ ▼ ▼
+┌───────────────┐ ┌───────────────┐ ┌───────────────┐
+│ Ubuntu │ │ Windows 10 │ │ Kali │
+│ SIEM Server │◄─────────│ Endpoint │ │ Attacker │
+│ │ Logs │ │ │ │
+│ ELK Stack │ (Port │ Sysmon + │ │ Hydra/Nmap │
+│ Elasticsearch│ 5044) │ Winlogbeat │ │ │
+│ Kibana │ │ │ │ │
+│ │ │ │ │ │
+│ 192.168.56.10 │ │ 192.168.56.20 │ │ 192.168.56.30 │
+└───────────────┘ └───────────────┘ └───────────────┘
+▲ ▲
+│ │
+└────────────────────────────┘
+Log Ingestion
+(Winlogbeat → Logstash → Elasticsearch)
+
+### Component Breakdown
+
+| Component | Role | IP Address | OS |
+|-----------|------|------------|-----|
+| **ELK Server** | SIEM (Elasticsearch, Kibana, Logstash) | 192.168.56.10 | Ubuntu 22.04 LTS |
+| **Endpoint** | Log source (Security logs + Sysmon) | 192.168.56.20 | Windows 10 |
+| **Attacker** | Attack simulation machine | 192.168.56.30 | Kali Linux |
+
+---
+
+## 🛠️ Tools & Technologies
+
+| Category | Tools | Version |
+|----------|-------|---------|
+| **SIEM** | Elasticsearch, Kibana, Logstash | 8.13.0 |
+| **Log Shipping** | Winlogbeat | 8.13.0 |
+| **Endpoint Logging** | Sysmon | 15.20 |
+| **Attack Simulation** | Hydra, Nmap | Latest |
+| **Virtualization** | VirtualBox | 7.2.8 |
+| **Operating Systems** | Ubuntu 22.04 LTS, Windows 10, Kali Linux | - |
+
+---
+
+## 📦 Installation Guide
+
+### 1. Virtual Machine Setup
+
+**Prerequisites:**
+- VirtualBox 7.2.8+ installed
+- 16GB+ host RAM recommended
+- 100GB+ free disk space
+
+**Network Configuration (Host-Only Adapter):**
+| VM | IP Address |
+|----|------------|
+| Ubuntu (ELK) | 192.168.56.10 |
+| Windows 10 | 192.168.56.20 |
+| Kali | 192.168.56.30 |
+
+### 2. ELK Stack Installation on Ubuntu
+
+```bash
+# Install prerequisites
+sudo apt update && sudo apt upgrade -y
+sudo apt install apt-transport-https zip unzip lsb-release curl gnupg -y
+
+# Add Elastic repository
+wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | sudo gpg --dearmor -o /usr/share/keyrings/elasticsearch-keyring.gpg
+echo "deb [signed-by=/usr/share/keyrings/elasticsearch-keyring.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main" | sudo tee /etc/apt/sources.list.d/elastic-8.x.list
+
+
+Configure Elasticsearch (/etc/elasticsearch/elasticsearch.yml):
+# Install components
+sudo apt update
+sudo apt install elasticsearch kibana logstash -y
+network.host: 192.168.56.10
+http.port: 9200
+discovery.type: single-node
+xpack.security.enabled: false
+
+
+Set JVM Heap Size (/etc/elasticsearch/jvm.options.d/heap.options):
+-Xms1g
+-Xmx1g
+
+Configure Kibana (/etc/kibana/kibana.yml):
+server.host: "0.0.0.0"
+elasticsearch.hosts: ["http://192.168.56.10:9200"]
+
+Configure Logstash (/etc/logstash/conf.d/winlogbeat.conf):
+input {
+  beats {
+    port => 5044
+    host => '0.0.0.0'
+  }
+}
+output {
+  elasticsearch {
+    hosts => ['http://192.168.56.10:9200']
+    index => 'winlogbeat-%{+YYYY.MM.dd}'
+    ssl_certificate_verification => false
+  }
+}
+
+Start services:
+sudo systemctl start elasticsearch
+sudo systemctl enable elasticsearch
+sudo systemctl start kibana
+sudo systemctl enable kibana
+sudo systemctl start logstash
+sudo systemctl enable logstash
+
+
+3. Windows Endpoint Setup
+Install Sysmon:
+# Download Sysmon and config
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/SwiftOnSecurity/sysmon-config/main/sysmonconfig.xml" -OutFile "sysmonconfig.xml"
+
+# Install Sysmon
+.\Sysmon64.exe -accepteula -i .\sysmonconfig.xml
+
+Install and Configure Winlogbeat:
+# Download Winlogbeat (from elastic.co)
+
+# Edit winlogbeat.yml
+# Set output.logstash.hosts: ["192.168.56.10:5044"]
+
+# Add Sysmon log source
+winlogbeat.event_logs:
+  - name: Application
+  - name: Security
+  - name: System
+  - name: Microsoft-Windows-Sysmon/Operational
+
+# Install and start service
+.\install-service-winlogbeat.ps1
+Start-Service winlogbeat
+
+4. Kali Attack Machine
+sudo apt update
+sudo apt install hydra nmap -y
+
+🚨 Detection Capabilities
+Attack Type	Detection Method	Windows Event ID	MITRE Technique
+Brute Force	Failed login threshold	4625	T1110.001
+Network Recon	Port scan detection	5156	T1046
+
+Custom Detection Rule (Kibana)
+# Brute Force Detection (10+ failed attempts in 5 minutes)
+event.code: 4625
+| stats count by source.ip, winlog.event_data.TargetUserName
+| where count > 10
+
+⚔️ Attack Simulation & Results
+Simulated Attack 1: SMB Brute Force (Hydra)
+Kali Command:
+hydra -l administrator -P /tmp/passwords.txt smb://192.168.56.20 -t 1
+Generated Events:
+10 failed login attempts (Event ID 4625)
+Source IP: 192.168.56.30
+Target: 192.168.56.20
+
+Simulated Attack 2: Network Reconnaissance (Nmap)
+Kali Command:
+nmap -sS 192.168.56.20
+
+Generated Events:
+Port scan detected (Event ID 5156)
+20+ port probes logged
+
+📋 Incident Response Report
+Case: SMB Brute Force Attempt
+Incident ID: SOC-2026-001
+Date: June 28, 2026
+Analyst: Mugesh
+Status: Closed
+
+Executive Summary
+On June 28, 2026, the SOC lab detected 10+ failed SMB login attempts from IP address 192.168.56.30 targeting the Windows endpoint 192.168.56.20. The event was identified by the Kibana brute force detection rule.
+
+Indicators of Compromise (IOCs)
+IOC	Value
+Source IP	192.168.56.30
+Target IP	192.168.56.20
+Protocol	SMB (port 445)
+Username Attempted	administrator
+Attack Type	Brute Force
+Number of Attempts	10+
+MITRE ATT&CK Mapping
+Tactic: Credential Access (TA0006)
+Technique: Brute Force (T1110.002)
+Platform: Window
+
+Technical
+Firewall Configuration is Critical - Windows Firewall blocked SMB traffic initially; creating proper inbound rules was essential for log generation.
+Field Mapping Matters - Kibana visualizations required the correct field names (source.ip, winlog.event_data.Image).
+Protocol Compatibility - Hydra's SMB module is experimental; SMB2/SMB3 support requires explicit protocol flags.
+Time Ranges are Important - Alert rules must use correct time windows to avoid missing events.
+
+Operational
+Document Everything - Detailed configuration files and commands save hours of debugging.
+Test Continuously - Regular attack simulations validate detection capabilities.
+Version Control - Save configuration files to GitHub for reproducibility.
+
+
