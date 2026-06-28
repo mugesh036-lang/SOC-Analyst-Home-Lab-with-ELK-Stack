@@ -1,0 +1,33 @@
+📋 Incident Response Report
+Case: SMB Brute Force Attempt
+Incident ID: SOC-2026-001
+Date: June 28, 2026
+Analyst: Mugesh
+Status: Closed
+
+Executive Summary
+On June 28, 2026, the SOC lab detected 10+ failed SMB login attempts from IP address 192.168.56.30 targeting the Windows endpoint 192.168.56.20. The event was identified by the Kibana brute force detection rule.
+
+Indicators of Compromise (IOCs)
+IOC	Value
+Source IP	192.168.56.30
+Target IP	192.168.56.20
+Protocol	SMB (port 445)
+Username Attempted	administrator
+Attack Type	Brute Force
+Number of Attempts	10+
+MITRE ATT&CK Mapping
+Tactic: Credential Access (TA0006)
+Technique: Brute Force (T1110.002)
+Platform: Window
+
+Technical
+Firewall Configuration is Critical - Windows Firewall blocked SMB traffic initially; creating proper inbound rules was essential for log generation.
+Field Mapping Matters - Kibana visualizations required the correct field names (source.ip, winlog.event_data.Image).
+Protocol Compatibility - Hydra's SMB module is experimental; SMB2/SMB3 support requires explicit protocol flags.
+Time Ranges are Important - Alert rules must use correct time windows to avoid missing events.
+
+Operational
+Document Everything - Detailed configuration files and commands save hours of debugging.
+Test Continuously - Regular attack simulations validate detection capabilities.
+Version Control - Save configuration files to GitHub for reproducibility.
